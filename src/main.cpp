@@ -9,6 +9,7 @@
 #include <WiFiUdp.h>
 
 #define LEDNUM 300
+#define PSPLIT 125
 
 void sendTpm2packets();
 
@@ -48,17 +49,56 @@ void loop()
 
 void sendTpm2packets()
 {
-  UDP.beginPacket(WLEDIP, 65506);
-  UDP.write(0x9c);
-  UDP.write(0xda);
-  UDP.write((LEDNUM * 3) >> 8);
-  UDP.write((LEDNUM * 3) & 0xff);
-  UDP.write(0x01);
-  UDP.write(0x01);
-  for (int i = 0; i < (LEDNUM * 3); i++)
+  // Anzahl der vollständigen Pakete bestimmen
+  uint8_t packetcount = LEDNUM / PSPLIT;
+
+  // Wenn es noch einen Rest gibt der kleiner ist als PSPLIT
+  if (LEDNUM % PSPLIT > 0)
   {
-    UDP.write(ledstream[i]);
+    packetcount++;
   }
-  UDP.write(0x36);
-  UDP.endPacket();
+  // Groesse des letzten Paketes berechnen
+  uint lastpacketcount = (LEDNUM % PSPLIT) * 3;
+
+  // den Zähler für die Anzahl der volständigen Pakete berechnen
+  uint8_t packetloop = packetcount;
+  if (lastpacketcount > 0)
+  {
+    packetloop--;
+  }
+
+  for (int j = 0; j < packetloop; j++)
+  {
+    UDP.beginPacket(WLEDIP, 65506);
+    UDP.write(0x9c);
+    UDP.write(0xda);
+    UDP.write((PSPLIT * 3) >> 8);
+    UDP.write((PSPLIT * 3) & 0xff);
+
+    UDP.write(j + 1);
+    UDP.write(packetcount);
+    for (int i = PSPLIT * 3 * j; i < PSPLIT * 3 * (j + 1); i++)
+    {
+      UDP.write(ledstream[i]);
+    }
+    UDP.write(0x36);
+    UDP.endPacket();
+  }
+  if (lastpacketcount > 0)
+  {
+    UDP.beginPacket(WLEDIP, 65506);
+    UDP.write(0x9c);
+    UDP.write(0xda);
+    UDP.write(lastpacketcount >> 8);
+    UDP.write(lastpacketcount & 0xff);
+
+    UDP.write(packetcount);
+    UDP.write(packetcount);
+    for (int i = LEDNUM * 3 - lastpacketcount; i < LEDNUM * 3; i++)
+    {
+      UDP.write(ledstream[i]);
+    }
+    UDP.write(0x36);
+    UDP.endPacket();
+  }
 }
